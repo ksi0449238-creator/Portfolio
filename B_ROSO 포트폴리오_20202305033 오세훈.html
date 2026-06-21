@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full select-none overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B-ROSO - Cosmic Fabric Art</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- 완벽한 CSV 파싱을 위한 PapaParse -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <!-- 구글 폰트 -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { background-color: #010103; margin: 0; padding: 0; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+
+        .custom-cursor-mode, .custom-cursor-mode canvas, .custom-cursor-mode a, .custom-cursor-mode button {
+            cursor: none !important;
+        }
+
+        .flip-container { perspective: 1000px; }
+        .custom-cursor-mode .flip-container, .custom-cursor-mode .flip-card { cursor: none !important; }
+        .flip-card { width: 240px; height: 52px; transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); position: relative; }
+        .flip-container:hover .flip-card { transform: rotateY(180deg); }
+        .flip-front, .flip-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; align-items: center; justify-content: flex-start; }
+        .flip-front { color: transparent; -webkit-text-stroke: 1.2px #89f5e1; letter-spacing: 0.1em; }
+        .flip-back { color: #89f5e1; transform: rotateY(180deg); text-shadow: 0 0 10px rgba(137, 245, 225, 0.85), 0 0 20px rgba(137, 245, 225, 0.45); letter-spacing: 0.15em; }
+
+        .glow-bg { background: radial-gradient(circle at 75% 25%, var(--glow-color) 0%, transparent 55%), radial-gradient(circle at 25% 75%, var(--glow-color) 0%, transparent 55%); opacity: 0.25; filter: blur(80px); mix-blend-mode: screen; transition: background 0.5s ease-out; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        #cosmic-loader { background: radial-gradient(circle at center, #05060c 0%, #010103 100%); transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1); }
+    </style>
+</head>
+<body class="h-full w-full text-white m-0 p-0 relative overflow-hidden">
+
+    <!-- 로딩 스크린 -->
+    <div id="cosmic-loader" class="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-auto">
+        <div class="relative w-24 h-24 mb-6 flex items-center justify-center">
+            <div class="absolute inset-0 rounded-full border border-t-transparent border-[#89f5e1] animate-spin" style="animation-duration: 1.5s;"></div>
+            <div class="absolute inset-2 rounded-full border border-b-transparent border-purple-500 animate-spin" style="animation-duration: 2s; direction: rtl;"></div>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#89f5e1" stroke-width="1.5" class="animate-pulse">
+                <path d="M12 2C11.3 5 10 9 10 13L4 17L10 17L11 19.5L12 18.2 13 19.5L14 17L20 17L14 13C14 9 12.7 5 12 2Z" />
+            </svg>
+        </div>
+        <h1 class="font-orbitron text-lg font-bold tracking-[0.3em] text-white/90">LOADING STAR MATRIX</h1>
+        <p class="text-xs text-white/40 mt-3 font-light tracking-widest uppercase" id="loader-status">ALIGNING SPACE FABRICS...</p>
+    </div>
+
+    <!-- 3D WebGL 캔버스 -->
+    <canvas id="cosmic-canvas" class="absolute inset-0 z-0 block w-full h-full pointer-events-auto"></canvas>
+
+    <!-- 메인 네비게이션 -->
+    <div class="absolute top-8 left-8 z-20 pointer-events-auto select-none flip-container" onclick="openAboutPage()">
+        <div class="flip-card font-orbitron text-2xl md:text-3xl font-black tracking-widest cursor-pointer">
+            <div class="flip-front">WHAT IF...?</div>
+            <div class="flip-back">B-ROSO</div>
+        </div>
+    </div>
+
+    <nav class="absolute top-10 right-10 z-20 pointer-events-auto select-none">
+        <ul class="flex gap-10 font-orbitron text-sm font-bold tracking-[0.2em]">
+            <li class="relative group">
+                <span class="cursor-pointer text-white hover:text-[#89f5e1] transition-colors duration-300" onclick="openListPage()">PROJECTS</span>
+                <div class="absolute -bottom-2 left-0 w-0 h-[2px] bg-[#89f5e1] transition-all duration-300 group-hover:w-full"></div>
+            </li>
+            <li class="text-gray-500 hover:text-white transition-colors duration-300 cursor-pointer" onclick="openAboutPage()">ABOUT</li>
+            <li class="text-gray-500 hover:text-white transition-colors duration-300 cursor-pointer">CONTACT</li>
+        </ul>
+    </nav>
+
+    <!-- 우주선 커서 -->
+    <div id="rocket-cursor" class="fixed pointer-events-none select-none z-[90] flex items-center justify-center drop-shadow-[0_0_10px_#89f5e1]" style="left: -100px; top: -100px; width: 32px; height: 32px; transform-origin: center;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#89f5e1" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2C11.3 5 10 9 10 13L4 17L10 17L11 19.5L12 18.2L13 19.5L14 17L20 17L14 13C14 9 12.7 5 12 2Z" />
+            <path d="M12 6C11.5 8 11.2 9.5 11.2 11H12.8C12.8 9.5 12.5 8 12 6Z" stroke="#89f5e1" stroke-width="1.0" fill="rgba(137,245,225,0.1)" />
+            <path d="M12 18.2 L12 23" class="animate-pulse opacity-90" stroke="#f59e0b" stroke-width="1.8" />
+        </svg>
+    </div>
+
+    <!-- 호버 오버레이 HUD -->
+    <div id="constellation-overlay" class="absolute pointer-events-none select-none hidden flex-col items-center z-10 transition-all duration-300 transform -translate-x-1/2 -translate-y-full">
+        <div id="project-card" class="opacity-0 scale-90 transition-all duration-500 flex flex-col items-center p-2 max-w-[320px] text-center">
+            <span id="overlay-category" class="text-[11px] font-bold tracking-[0.3em] uppercase drop-shadow-[0_0_6px_currentColor]">CATEGORY</span>
+            <span id="overlay-project" class="text-xl md:text-2xl font-black tracking-widest text-white mt-1.5 drop-shadow-[0_0_10px_rgba(255,255,255,0.6)]">PROJECT NAME</span>
+            <span class="text-[10px] text-white/50 mt-2 tracking-widest animate-pulse border border-white/20 px-3 py-1 rounded-full bg-black/40">CLICK TO VIEW</span>
+        </div>
+    </div>
+
+    <!-- ================= 상세 페이지 ================= -->
+    <div id="detail-page" class="fixed inset-0 z-40 bg-[#03050a] hidden opacity-0 transition-opacity duration-700 pointer-events-auto overflow-hidden" style="--glow-color: #89f5e1;">
+        <div id="detail-glow" class="absolute inset-0 glow-bg pointer-events-none"></div>
+        <div id="detail-vertical-text" class="absolute left-8 bottom-1/4 -rotate-90 origin-left text-[60px] md:text-[80px] font-black text-transparent opacity-20 select-none pointer-events-none font-orbitron mix-blend-screen z-0" style="-webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.4); white-space: nowrap;">CATEGORY</div>
+        
+        <div class="relative w-full h-full max-w-5xl mx-auto px-6 md:px-12 pt-24 pb-24 no-scrollbar overflow-y-auto z-10 flex flex-col gap-10">
+            <div>
+                <button onclick="closeAllPages()" class="text-white/50 hover:text-white flex items-center gap-2 transition-colors text-sm font-bold tracking-widest uppercase cursor-pointer">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    BACK TO GALAXY
+                </button>
+            </div>
+            <div class="mt-4">
+                <h2 id="detail-title" class="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] mb-4 leading-tight break-keep">TITLE</h2>
+                <p id="detail-subtitle" class="text-slate-400 text-sm md:text-base tracking-wide leading-relaxed whitespace-pre-line font-medium">SUBTITLE</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 lg:gap-12 bg-black/20 p-8 rounded-2xl border border-white/5 backdrop-blur-sm">
+                <div class="col-span-1">
+                    <h3 class="text-[#89f5e1] font-bold text-xs md:text-sm tracking-widest mb-3 uppercase" id="detail-cat-label">ROLE</h3>
+                    <p id="detail-role" class="text-slate-300 text-sm md:text-base tracking-wide leading-relaxed whitespace-pre-line font-semibold">ROLE</p>
+                </div>
+                <div class="col-span-1 lg:col-span-3">
+                    <h3 class="text-slate-500 font-bold text-xs md:text-sm tracking-widest mb-3 uppercase">SYNOPSIS</h3>
+                    <div id="detail-desc" class="text-slate-300 text-sm md:text-base tracking-wide leading-loose whitespace-pre-line font-light">DESCRIPTION</div>
+                </div>
+            </div>
+            <div class="w-full relative h-[300px] md:h-[450px] lg:h-[550px] bg-black/50 border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex-shrink-0 mt-4">
+                <div id="slider-container" class="w-full h-full relative"></div>
+                <div class="absolute bottom-0 left-0 h-1.5 bg-black/40 w-full z-10"><div id="slider-progress" class="h-full w-0 transition-all duration-100 ease-linear shadow-[0_0_10px_#89f5e1]"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 아카이브 그리드 ================= -->
+    <div id="list-page" class="fixed inset-0 z-30 bg-[#010103]/95 backdrop-blur-xl hidden opacity-0 transition-opacity duration-700 pointer-events-auto overflow-hidden">
+        <div class="w-full h-full max-w-7xl mx-auto px-8 pt-32 pb-20 no-scrollbar overflow-y-auto">
+            <h2 class="font-orbitron text-4xl md:text-5xl font-black text-white tracking-[0.2em] mb-12 border-b border-white/10 pb-6">PROJECT <span class="text-[#89f5e1]">ARCHIVE</span></h2>
+            <div id="project-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+    </div>
+
+    <!-- ================= ABOUT 소개 ================= -->
+    <div id="about-page" class="fixed inset-0 z-[60] bg-[#050608] hidden opacity-0 transition-opacity duration-700 pointer-events-auto overflow-hidden">
+        <button onclick="closeAllPages()" class="absolute top-8 right-8 z-[70] text-white/80 hover:text-white flex items-center justify-center transition-colors text-xs md:text-sm font-bold tracking-[0.2em] uppercase border border-white/30 rounded-full px-8 py-2.5 bg-[#050608]/80 backdrop-blur-md hover:bg-white/10 hover:border-white/60">CLOSE</button>
+        <div class="w-full h-full flex flex-row max-w-6xl mx-auto px-6 md:px-12 relative overflow-hidden">
+            <div class="w-[50px] sm:w-[80px] md:w-[180px] h-full flex flex-col justify-start pt-32 select-none pointer-events-none sticky top-0 shrink-0">
+                <div class="flex flex-col items-center gap-1 sm:gap-1.5 md:gap-3 text-transparent tracking-widest text-[20px] sm:text-[36px] md:text-[64px] font-light leading-none" style="font-family: 'Times New Roman', Times, serif; -webkit-text-stroke: 1.2px rgba(255, 255, 255, 0.25);">
+                    <span>S</span><span>E</span><span>H</span><span>O</span><span>O</span><span>N</span><span class="h-6 md:h-12"></span><span>O</span><span>H</span>
+                </div>
+            </div>
+            <div class="flex-1 h-full overflow-y-auto no-scrollbar pt-32 pb-32 pl-4 md:pl-12 flex flex-col gap-12 relative pr-2">
+                <section class="flex flex-col gap-6">
+                    <h2 class="text-3xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">끊임없이 <br><span class="text-[#89f5e1] drop-shadow-[0_0_15px_rgba(137,245,225,0.7)] font-black">샛별</span>같은 아이디어를 던진다</h2>
+                    <div class="text-slate-300 text-sm md:text-base leading-loose tracking-wide font-light space-y-4">
+                        <p>연극, 영화, 영상, 사진, 디자인 전방위에서 창작활동을 이어가고 있습니다.</p>
+                        <p>모든 것에 '만약 ~라면?'이라 가정하고 상상하며 '창작의 우주'에서 헤엄치다 보니 비로소 나만의 별자리가 탄생했습니다.</p>
+                    </div>
+                </section>
+                <section class="flex flex-col gap-6">
+                    <h3 class="font-orbitron text-xl font-bold tracking-[0.2em] text-white border-b border-white/10 pb-3">EXPERIENCE</h3>
+                    <div class="flex flex-col gap-10 text-sm md:text-base">
+                        <div class="flex flex-col gap-4">
+                            <h4 class="text-[#89f5e1] font-bold tracking-wide">- 서경대학교 공연예술학부 연출전공</h4>
+                            <div class="grid grid-cols-[70px_1fr] gap-x-6 gap-y-3.5 text-slate-300 leading-relaxed font-light">
+                                <div class="font-orbitron font-bold text-white/50">2026</div><div class="flex flex-col"><div>연극 &lt;만원&gt; | 영상디자인</div><div>연극 &lt;메두사의 뗏목&gt; | 영상디자인</div></div>
+                                <div class="font-orbitron font-bold text-white/50">2025</div><div class="flex flex-col gap-1"><div>&lt;창작극 쇼케이스&gt; | 작/연출, 영상총괄</div><div>갈라쇼 HUB2O Stage1 &lt;패왕별희&gt; | 영상디자인</div><div>XR Theater &lt;별무리&gt; | 3D 아트워크</div><div>XR Theater &lt;RED FACE&gt; | 조연출, 3D 아트워크, 작사</div><div>연극 &lt;Last Second on Earth&gt; | 영상디자인</div><div>연극 &lt;오해&gt; | 음향</div><div>패션쇼 &lt;Metamorphosis&gt;, &lt;LINE&gt; | 영상/편집디자인</div><div>낭독극 &lt;보이맨&gt; | 영상어시스트</div><div>연극 &lt;맨 끝줄 소년&gt; | 연출부, 영상오퍼레이터</div></div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-4">
+                            <h4 class="text-[#89f5e1] font-bold tracking-wide">- 공군 제15특수임무비행단 정훈실</h4>
+                            <div class="grid grid-cols-[70px_1fr] gap-x-6 gap-y-3.5 text-slate-300 leading-relaxed font-light">
+                                <div class="font-orbitron font-bold text-white/50">2024</div><div>&lt;한성블루스&gt; | 기획/디자인</div>
+                                <div class="font-orbitron font-bold text-white/50">2023</div><div class="flex flex-col"><div>&lt;군종&gt; | 작/연출</div><div>&lt;해&gt; | 공동창작</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <section class="flex flex-col gap-6">
+                    <h3 class="font-orbitron text-xl font-bold tracking-[0.2em] text-white border-b border-white/10 pb-3">TOOLS</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-sm text-slate-300 font-light">
+                        <div><h4 class="text-[#89f5e1] font-bold mb-3 uppercase">2D</h4><ul class="space-y-1"><li>Photoshop</li><li>Illustrator</li><li>After Effects</li><li>Premiere Pro</li></ul></div>
+                        <div><h4 class="text-[#89f5e1] font-bold mb-3 uppercase">3D</h4><ul class="space-y-1"><li>Maya</li><li>Substance 3D Painter</li><li>Unreal Engine 5.6</li></ul></div>
+                        <div><h4 class="text-[#89f5e1] font-bold mb-3 uppercase">Audio / Edit</h4><ul class="space-y-1"><li>Audition</li><li class="pt-2 text-[#89f5e1] font-bold uppercase">Edit</li><li>Indesign</li><li>Lightroom</li></ul></div>
+                        <div><h4 class="text-[#89f5e1] font-bold mb-3 uppercase">Programming</h4><ul class="space-y-1"><li>Qlab</li><li>MadMapper</li></ul></div>
+                    </div>
+                </section>
+                <section class="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div><h3 class="font-orbitron text-xl font-bold tracking-[0.2em] text-white border-b border-white/10 pb-3 mb-6">LICENSE</h3><ul class="space-y-2 text-sm text-slate-300 font-light"><li>GTQ 1급</li><li>웹디자인기능사</li><li>컴퓨터그래픽스운용기능사</li><li>사진기능사</li><li>멀티미디어콘텐츠제작전문가</li></ul></div>
+                    <div><h3 class="font-orbitron text-xl font-bold tracking-[0.2em] text-white border-b border-white/10 pb-3 mb-6">EMAIL</h3><p class="text-sm text-[#89f5e1] font-orbitron tracking-widest hover:underline cursor-pointer">ksi0449238@gmail.com</p></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.body.classList.add('custom-cursor-mode');
+
+        // ================== 정밀 데이터베이스 시스템 ==================
+        let allProjectsData = [];
+        let coreProjects = [];
+        let constellationProjects = [];
+
+        // 🛠️ 오프라인 백업 데이터베이스 (전체 누락 복구 및 정렬 완료)
+        const embeddedDatabase = [
+            { category: "편집디자인", enCategory: "EDITORIAL DESIGN", colorHex: "#1ab21a", title: "시간의 붕괴에 순응한다면?", subtitle: "패션필름 <de:story> (2026)", role: "편집자", Synopsis: "시계와 갈륨 이미지에서 출발하여 세가지 모습을 보여준다.\n첫번째는 시계의 부품들, 두번째는 갈륨 침식, 세번째는 금속이 녹아내리며 액체와 신체의 융합을 보여준다.", image1: "destory_1.jpg", image2: "destory_2.jpg", image3: "destory_3.jpg" },
+            { category: "영상 엔지니어링", enCategory: "VIDEO ENGINEERING", colorHex: "#0000FF", title: "지나쳐간 일상들을 겹쳐볼 수 있다면?", subtitle: "패션쇼 <CROSSROADS>, <HANVIT> (2026)", role: "영상 엔지니어", Synopsis: "수많은 사람들이 스쳐 지나가듯 각자의 색과 이야기가 교차하며 만들어내는 순간, 또 하나의 흐름을 완성한다.", image1: "crossroads1.JPG", image2: "crossroads2.JPG", image3: "crossroads3.jpg" },
+            { category: "영상디자인", enCategory: "PROJECTION DESIGN", colorHex: "#08b2aa", title: "보는것만으로 사람냄새를 느낄 수 있다면?", subtitle: "연극 <만원> (2026)", role: "영상 디자이너", Synopsis: "어느 길거리, 한 사람이 길을 걷다 우연히 만원 한 장을 줍고는 그 여정을 궁금해한다.", image1: "Manwon1.jpg", image2: "Manwon2.jpg", image3: "Manwon3.jpg" },
+            { category: "기획, 그래픽디자인", enCategory: "PLANNING, GRAPHIC DESIGN", colorHex: "#660bad", title: "자개장을 손 안에 들고다닌다면?", subtitle: "<무아> (2026)", role: "기획, 그래픽 디자이너", Synopsis: "검무예 퍼포먼스그룹 <무아>의 서브디자인. '무예하며 춤추는 나'의 자유로움과 잠재력을 브랜딩하였다.", image1: "MUA1.png", image2: "MUA2.png", image3: "MUA3.png" },
+            { category: "3D 아트워크", enCategory: "3D ARTWORKS", colorHex: "#e6b800", title: "산을 오르다 홀려들어간다면?", subtitle: "<창귀> (2026)", role: "3D 디자이너", Synopsis: "도망치듯 산 속을 헤매다 찾아낸 도피처가 사실 창귀의 꼬임에 홀려들어간 함정이었다는 스토리를 담고 있다.", image1: "Changwi1.jpg", image2: "Changwi2.png", image3: "Changwi3.png" },
+            { category: "영상디자인", enCategory: "PROJECTION DESIGN", colorHex: "#08b2aa", title: "관객들과 함께 파도를 유영할 수 있다면?", subtitle: "연극 <메두사의 뗏목> (2026)", role: "영상 디자이너", Synopsis: "끝없이 펼쳐진 바다 한가운데 남겨진 작은 뗏목과 그 위의 13명의 아이들.", image1: "MEDUSA_1.jpg", image2: "Medusa_2.jpg", image3: "Medusa_3.jpg" },
+            { category: "영상디자인, 그래픽디자인", enCategory: "PROJECTION DESIGN, GRAPHIC DESIGN", colorHex: "#08b2aa", title: "우리의 이야기들이 하나의 동화같은 세계로 펼쳐진다면?", subtitle: "창작극 쇼케이스 (2025)", role: "영상총괄, 디자인", Synopsis: "크리스마스를 앞둔 겨울날, 이틀간 펼쳐진 14개의 꿈결같은 이야기들.", image1: "Changshow_.JPG", image2: "Changshow1.jpg", image3: "Changshow2.jpg" },
+            { category: "영상디자인", enCategory: "PROJECTION DESIGN", colorHex: "#08b2aa", title: "사후세계에 주마등 대신 인트로가 나온다면?", subtitle: "갈라쇼 <HUB20 Stage1 : 패왕별희> (2025)", role: "영상 디자이너", Synopsis: "전쟁에서 패한 항우가 죽기 직전 본인의 삶을 회고한다.", image1: "PW1.jpg", image2: "PW2.jpg", image3: "PW3.png" },
+            { category: "3D 아트워크", enCategory: "3D ARTWORKS", colorHex: "#e6b800", title: "영혼이 자유롭게 사후세계를 오간다면?", subtitle: "XR Theater <별무리> (2025)", role: "3D 디자이너", Synopsis: "은하수의 별이 빛나는 밤, 작은 존재가 주던 커더란 사랑의 기억이 현재가 다시금 큰 발걸음으로 나아갈 힘을 준다.", image1: "Stargroup1.PNG", image2: "Stargroup2.PNG", image3: "Stargroup3.PNG" },
+            { category: "3D 아트워크", enCategory: "3D ARTWORKS", colorHex: "#e6b800", title: "미래도시의 디자인이 현재와 큰 차이가 없다면?", subtitle: "XR Theater <RED FACE> (2025)", role: "조연출, 3D 디자이너, 작사", Synopsis: "홍조가 다섯 번 일어나면 칩이 폭발하는 세계관을 노래하는 가수 RED FACE의 메타버스 콘서트.", image1: "Redface_1.PNG", image2: "Redface_2.PNG", image3: "Redface_3.PNG" },
+            { category: "영상디자인", enCategory: "PROJECTION DESIGN", colorHex: "#08b2aa", title: "공간을 훔쳐보듯 상상을 유도한다면?", subtitle: "연극 <Last Second on Earth> (2025)", role: "영상 디자이너", Synopsis: "지구가 소행성과 충돌하기 일주일 전, 얼떨결에 하고싶은게 너무 많은 '온도'를 만나 함께하게 된다.", image1: "LASE_1.jpg", image2: "LASE_2.jpg", image3: "LASE_3.jpg" },
+            { category: "음향", enCategory: "SOUND ENGINEERING", colorHex: "#d92626", title: "다 함께 폭포에 쓸려나갈 수 있다면?", subtitle: "연극 <오해 : 지금 여기> (2025)", role: "음향 엔지니어, 오퍼레이터", Synopsis: "20년간 타국에서 살던 한 남자가 고향으로 돌아와 자신의 정체를 밝히지 않은 채 여인숙에 묵는다.", image1: "OHE_1.JPG", image2: "OHE2.jpg", image3: "OHE3.png" },
+            { category: "작, 연출", enCategory: "PLAYWRITING, DIRECTING", colorHex: "#f27d0c", title: "배역이 배우와 만날 수 있다면?", subtitle: "연극 <아라리> (2025)", role: "작/연출", Synopsis: "배우를 꿈꾸는 아라, 기묘한 사람 리와 이상한 동거를 시작한다.", image1: "Arari_1.png", image2: "ARARI2.jpg", image3: "Arari3.PNG" },
+            { category: "영상 엔지니어링", enCategory: "VIDEO ENGINEERING", colorHex: "#0000FF", title: "보이지 않아도 기억에 남을 수 있다면?", subtitle: "패션쇼 <Metamorphosis>, <LINE> (2025)", role: "영상 엔지니어", Synopsis: "껍질을 깨고, 나를 벗어나다. 가장 뜨겁고 순수한 그 순간에 주목한다.", image1: "Morph1.JPG", image2: "Morph2.JPG", image3: "Morph3.jpg" },
+            { category: "사진", enCategory: "PHOTOGRAPHY", colorHex: "#a0522d", title: "어린시절의 나와 마주할 수 있다면?", subtitle: "화보 <투슬래시포> (2025)", role: "사진작가, 편집자", Synopsis: "뷰티메이크업학과와 협찬받아 실습해본 화보. 신비로우면서 키치함을 강조하였다.", image1: "twoslash1.png", image2: "twoslash2.png", image3: "twoslash3.png" },
+            { category: "편집디자인", enCategory: "EDITORIAL DESIGN", colorHex: "#1ab21a", title: "잊혀진 장난감이 살아난다면?", subtitle: "패션필름 <Obliviate> (2025)", role: "편집자", Synopsis: "아이가 크며 잊혀진 인형들. 오랜 시간 주인을 기다리며 잔해를 남기는데...", image1: "Obliviate1.png", image2: "Obliviate2.png", image3: "Obliviate3.png" },
+            { category: "3D 아트워크", enCategory: "3D ARTWORKS", colorHex: "#e6b800", title: "거친 풍랑속으로 다 함께 배를 띄워본다면?", subtitle: "<귀신고래> (2025)", role: "3D 디자이너", Synopsis: "갑자기 배가 흔들리기 시작하며 엄청난 위압감의 귀신고래와 만난다.", image1: "Whale_1.PNG", image2: "Whale.PNG", image3: "Whale2.PNG" },
+            { category: "작", enCategory: "PLAYWRITING", colorHex: "#f27d0c", title: "내일이 마감인데 만들어진게 없다면?", subtitle: "단편영화 <마감전날> (2025)", role: "공동창작, 촬영, 출연", Synopsis: "당장 내일로 다가온 공모전 마감일. 눈에 불을 켜고 사활을 건 회의를 시작한다.", image1: "MAGAM_1.jpeg", image2: "Magam2.png", image3: "Magam3.png" },
+            { category: "작", enCategory: "PLAYWRITING", colorHex: "#f27d0c", title: "덮어둔 꿈을 예상치 못하게 다시 마주한다면?", subtitle: "단편영화 <S# Again> (2025)", role: "촬영조감독, 출연", Synopsis: "오래된 꿈을 접고 공무원 준비를 하던 중 묻어놓았던 무언가가 다시 움직이기 시작한다.", image1: "Sagain1.jpeg", image2: "Sagain2.jpeg", image3: "Sagain2.jpg" },
+            { category: "작, 기획", enCategory: "PLAYWRITING, PLANNING", colorHex: "#f27d0c", title: "나 나의 하루가 나의 것이 아니라면?", subtitle: "단편영화 <오늘도 평범한 하루> (2025)", role: "공동기획, 드라마투르그", Synopsis: "직장인 민영이 스토킹에 노출되며 이 세상 자체를 의심하게 된다.", image1: "Opyung1.png", image2: "Opyung2.png", image3: "Opyung3.png" },
+            { category: "3D 아트워크", enCategory: "3D ARTWORKS", colorHex: "#e6b800", title: "영겁의 시간 속 놀이동산이 있다면?", subtitle: "<삼도천> (2025)", role: "3D 디자이너", Synopsis: "삼도천을 우리의 민속문화와 전통을 활용하여 놀이공원처럼 재해석하였다.", image1: "samdochon.jpg", image2: "samdochon1.jpg", image3: "samdochon3.jpg" },
+            { category: "기획, 그래픽디자인", enCategory: "PLANNING, GRAPHIC DESIGN", colorHex: "#660bad", title: "장비가 장난감이 된다면?", subtitle: "<한성블루스> (2024)", role: "기획, 그래픽 디자이너", Synopsis: "군의 이미지를 탈피하고 친숙하고 재미있게 바꾸어보고자 기획한 브랜딩 프로젝트.", image1: "Hansung1.png", image2: "Hansung_2.png", image3: "Hansung_3.png" },
+            { category: "작, 연출", enCategory: "PLAYWRITING, DIRECTING", colorHex: "#f27d0c", title: "과거의 파편과 마주칠 수 있다면?", subtitle: "단편영화 <군종> (2023)", role: "대본, 감독, 촬영감독, 편집자", Synopsis: "갓 입대한 군종병 준영이 자대에 오자마자 심각한 사건에 휘말리게 된다.", image1: "Goongong1.png", image2: "Goonjong2.png", image3: "Goonjong3.png" },
+            { category: "작", enCategory: "PLAYWRITING", colorHex: "#f27d0c", title: "들이치는 시대의 선택이 침묵이라면?", subtitle: "희곡 <해> (2023)", role: "공동창작", Synopsis: "구한말 외딴 섬 흑산도, 불청객이 찾아오며 거대한 풍랑 속에 놓이게 된다.", image1: "Hae1.png", image2: "Hae2.png", image3: "Hae3.png" }
+        ];
+
+        // 🛠️ 상대 경로 자동 보정 필터가 결합된 초정밀 변환기
+        function standardizeProject(raw, id) {
+            const cleanRow = {};
+            for (let key in raw) {
+                if (raw.hasOwnProperty(key) && raw[key] !== undefined && raw[key] !== null) {
+                    const cleanKey = key.replace(/^\uFEFF/g, '').replace(/\s+/g, '').toLowerCase();
+                    cleanRow[cleanKey] = String(raw[key]).trim();
+                }
+            }
+            const title = cleanRow['title'] || cleanRow['제목'] || cleanRow['프로젝트명'] || "Untitled Star";
+            const catStr = cleanRow['category'] || cleanRow['카테고리'] || cleanRow['분류'] || cleanRow['장르'] || cleanRow['분야'] || "";
+            let categories = catStr.split(/[,/]+/).map(s => s.trim()).filter(Boolean);
+            if (categories.length === 0) categories = ["미지"];
+
+            const enCategory = cleanRow['encategory'] || cleanRow['영문카테고리'] || cleanRow['영문분류'] || categories[0].toUpperCase();
+            const colorHex = cleanRow['colorhex'] || cleanRow['색상'] || cleanRow['컬러'] || cleanRow['포인트컬러'] || "#89f5e1";
+            const subtitle = cleanRow['subtitle'] || cleanRow['부제'] || cleanRow['소제목'] || "";
+            const role = cleanRow['role'] || cleanRow['역할'] || cleanRow['포지션'] || cleanRow['참여'] || "Creator";
+            const desc = cleanRow['synopsis'] || cleanRow['시놉시스'] || cleanRow['desc'] || cleanRow['설명'] || cleanRow['내용'] || "상세 정보가 수록되지 않은 천체입니다.";
+
+            // 🛠️ 로컬 공유 및 테스트 자동 보정 알고리즘 이식:
+            // 이미지 칸이 비어있지 않고, 외부 인터넷 주소(http/https)나 이미 images/ 폴더명으로 시작하는 형태가 아닌 
+            // "단순 파일명" 형태일 때만 자동으로 앞에 "images/" 폴더명을 붙여줍니다.
+            const rawImgs = [cleanRow['image1'], cleanRow['image2'], cleanRow['image3']].filter(Boolean);
+            const imgs = rawImgs.map(img => {
+                const cleanImg = img.trim();
+                if (cleanImg === "" || cleanImg.startsWith("http://") || cleanImg.startsWith("https://") || cleanImg.startsWith("data:") || cleanImg.startsWith("images/")) {
+                    return cleanImg;
+                }
+                return "images/" + cleanImg;
+            });
+
+            if (imgs.length === 0) imgs.push("https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=1200&q=80");
+
+            return { id: id, title: title, categories: categories, engCategory: enCategory, subtitle: subtitle, role: role, desc: desc, images: imgs, colorHex: colorHex, color: new THREE.Color(colorHex) };
+        }
+
+        // 자바스크립트 실행 완료를 보장하는 데이터 처리 함수
+        function processData(rawData) {
+            allProjectsData = rawData.map((row, idx) => standardizeProject(row, idx));
+
+            coreProjects = allProjectsData.filter(p => p.categories.some(c => {
+                const cleanC = c.replace(/\s+/g, '');
+                return cleanC.includes("영상디자인") || cleanC.includes("3D아트워크") || cleanC.includes("영상엔지니어") || cleanC.includes("영상엔지니어링");
+            }));
+            constellationProjects = allProjectsData.filter(p => !coreProjects.includes(p));
+
+            if (coreProjects.length !== 9 && allProjectsData.length >= 24) {
+                coreProjects = []; constellationProjects = [];
+                allProjectsData.forEach(p => {
+                    const matchText = p.categories.join('').replace(/\s+/g, '');
+                    if ((matchText.includes("영상디자인") || matchText.includes("3D아트워크") || matchText.includes("영상엔지니어") || matchText.includes("영상엔지니어링")) && coreProjects.length < 9) {
+                        coreProjects.push(p);
+                    } else constellationProjects.push(p);
+                });
+                while (coreProjects.length < 9 && constellationProjects.length > 0) coreProjects.push(constellationProjects.shift());
+            }
+
+            // 로딩 완료 보장 시스템: 데이터를 다 읽어들인 후에 Three.js와 애니메이션을 시작합니다.
+            const loader = document.getElementById('cosmic-loader');
+            loader.style.opacity = '0';
+            setTimeout(() => {
+                loader.classList.add('hidden');
+                // Three.js 씬 초기화 및 애니메이션 루프 시작
+                initSpaceScene(); 
+                animate();
+            }, 800);
+        }
+
+        function initProjectDatabase() {
+            const loaderStatus = document.getElementById('loader-status');
+            const targetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ1oEg7CpsENbRmEYp2MY7uAgC6KPuvqzfAdYYvyZfy5xq3ltJAptQzCELw05v1TST_5ccOuyfUssA0/pub?output=csv';
+            
+            const useFallback = (reason) => {
+                console.warn("Using Fallback embedded database. Reason:", reason);
+                loaderStatus.innerText = "LOADING LOCAL MATRIX...";
+                processData(embeddedDatabase);
+            };
+
+            try {
+                Papa.parse(targetUrl, {
+                    download: true, header: true, skipEmptyLines: true,
+                    complete: function(results) {
+                        try {
+                            if (results.data && results.data.length > 0) {
+                                const firstKey = Object.keys(results.data[0])[0];
+                                const firstVal = String(results.data[0][firstKey] || '').trim().toLowerCase();
+                                if (firstVal.includes('<!doctype') || firstVal.includes('<html')) throw new Error("Invalid CSV format");
+                                processData(results.data);
+                            } else useFallback("Parsed data from sheets was empty.");
+                        } catch (err) { useFallback(err.message); }
+                    },
+                    error: function() { tryDirectFetch(); }
+                });
+            } catch (e) { tryDirectFetch(); }
+
+            async function tryDirectFetch() {
+                try {
+                    const response = await fetch(targetUrl);
+                    if (!response.ok) throw new Error("Fetch response not ok");
+                    const csvText = await response.text();
+                    if (csvText.trim().startsWith('<')) throw new Error("Returned HTML block instead of valid CSV.");
+                    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                    if (parsed.data && parsed.data.length > 0) processData(parsed.data);
+                    else throw new Error("Parsed manual data empty.");
+                } catch (err) { useFallback(err.message); }
+            }
+        }
+
+        let isOverlayActive = false; let slideInterval; let slideProgressInterval; let currentSlideIdx = 0; const SLIDE_DURATION = 3000;
+
+        function setNormalCursorMode() { document.body.classList.remove('custom-cursor-mode'); const rc = document.getElementById('rocket-cursor'); if (rc) rc.style.display = 'none'; }
+        function setSpaceCursorMode() { document.body.classList.add('custom-cursor-mode'); const rc = document.getElementById('rocket-cursor'); if (rc) rc.style.display = 'flex'; }
+
+        function openDetailPage(project) {
+            isOverlayActive = true; document.getElementById('constellation-overlay').style.display = 'none'; setNormalCursorMode();
+            const detailPage = document.getElementById('detail-page'); const glowBg = document.getElementById('detail-glow');
+            document.getElementById('detail-title').innerText = project.title; document.getElementById('detail-subtitle').innerText = project.subtitle;
+            document.getElementById('detail-role').innerText = project.role; document.getElementById('detail-desc').innerText = project.desc;
+            const catLabel = document.getElementById('detail-cat-label'); catLabel.innerText = project.categories.join(' / '); catLabel.style.color = project.colorHex;
+            document.getElementById('slider-progress').style.backgroundColor = project.colorHex; document.getElementById('slider-progress').style.boxShadow = `0 0 10px ${project.colorHex}`;
+            glowBg.style.setProperty('--glow-color', project.colorHex);
+            const vertText = document.getElementById('detail-vertical-text'); if(vertText) vertText.innerText = project.engCategory;
+            
+            // 데이터 맵핑 보장 시스템: 데이터가 맵핑된 후에 슬라이더를 초기화합니다.
+            initSlider(project.images); 
+            detailPage.classList.remove('hidden'); 
+            setTimeout(() => { detailPage.classList.remove('opacity-0'); }, 10);
+        }
+
+        function openListPage() {
+            if(isOverlayActive) return; isOverlayActive = true; setNormalCursorMode();
+            const listPage = document.getElementById('list-page'); const grid = document.getElementById('project-grid');
+            grid.innerHTML = allProjectsData.map(proj => `
+                <div class="relative group cursor-pointer border border-white/10 bg-black/40 backdrop-blur-md p-6 rounded-xl hover:bg-white/5 transition-all duration-300" onclick="openDetailPageFromList(${proj.id})">
+                    <div class="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-300 rounded-xl" style="background-color: ${proj.colorHex}"></div>
+                    <span class="text-[10px] font-bold tracking-[0.2em] uppercase" style="color: ${proj.colorHex}">${proj.categories.join(' / ')}</span>
+                    <h3 class="text-xl font-black text-white mt-2 mb-4 tracking-wider">${proj.title}</h3>
+                    <p class="text-xs text-slate-400 line-clamp-3 leading-relaxed whitespace-pre-line">${proj.desc}</p>
+                </div>
+            `).join('');
+            listPage.classList.remove('hidden'); setTimeout(() => { listPage.classList.remove('opacity-0'); }, 10);
+        }
+
+        function openAboutPage() {
+            if (isOverlayActive) closeAllPages(); isOverlayActive = true; document.getElementById('constellation-overlay').style.display = 'none'; setNormalCursorMode();
+            const aboutPage = document.getElementById('about-page'); aboutPage.classList.remove('hidden'); setTimeout(() => { aboutPage.classList.remove('opacity-0'); }, 10);
+        }
+
+        function closeAllPages() {
+            isOverlayActive = false; setSpaceCursorMode(); 
+            const detailPage = document.getElementById('detail-page'); const listPage = document.getElementById('list-page'); const aboutPage = document.getElementById('about-page');
+            detailPage.classList.add('opacity-0'); listPage.classList.add('opacity-0'); aboutPage.classList.add('opacity-0');
+            if(slideInterval) clearInterval(slideInterval); if(slideProgressInterval) clearInterval(slideProgressInterval);
+            setTimeout(() => { detailPage.classList.add('hidden'); listPage.classList.add('hidden'); aboutPage.classList.add('hidden'); }, 700);
+        }
+
+        function openDetailPageFromList(id) { closeAllPages(); const proj = allProjectsData.find(p => p.id === id); if(proj) setTimeout(() => { openDetailPage(proj); }, 750); }
+
+        function initSlider(images) {
+            const container = document.getElementById('slider-container'); const progress = document.getElementById('slider-progress');
+            // 슬라이더 초기화 및 데이터 맵핑
+            container.innerHTML = images.map((src, i) => `<img src="${src}" class="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${i === 0 ? 'opacity-100' : 'opacity-0'}" id="slide-${i}" onerror="this.src='https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=1200&q=80'">`).join('');
+            
+            // 슬라이더 타이머 초기화
+            if(slideInterval) clearInterval(slideInterval); 
+            if(slideProgressInterval) clearInterval(slideProgressInterval);
+            
+            if(images.length <= 1) { progress.style.width = '100%'; return; }
+            currentSlideIdx = 0; let startTime = Date.now();
+            
+            // 슬라이더 타이머 작동
+            slideProgressInterval = setInterval(() => { let elapsed = Date.now() - startTime; let percent = (elapsed / SLIDE_DURATION) * 100; progress.style.width = `${Math.min(percent, 100)}%`; }, 16);
+            slideInterval = setInterval(() => {
+                const prev = document.getElementById(`slide-${currentSlideIdx}`); if(prev) prev.classList.replace('opacity-100', 'opacity-0');
+                currentSlideIdx = (currentSlideIdx + 1) % images.length;
+                const next = document.getElementById(`slide-${currentSlideIdx}`); if(next) next.classList.replace('opacity-0', 'opacity-100');
+                startTime = Date.now(); 
+            }, SLIDE_DURATION);
+        }
+
+        function createParticleTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64; const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32); gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)'); gradient.addColorStop(0.1, 'rgba(255, 255, 255, 1.0)'); gradient.addColorStop(0.3, 'rgba(240, 255, 255, 0.9)'); gradient.addColorStop(0.6, 'rgba(137, 245, 225, 0.45)'); gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(canvas);
+        }
+
+        function createSoftNebulaTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128; const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64); gradient.addColorStop(0, 'rgba(255, 255, 255, 0.45)'); gradient.addColorStop(0.5, 'rgba(100, 200, 255, 0.08)'); gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = gradient; ctx.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(canvas);
+        }
+
+        function getNebulaColorAtRatio(ratio) {
+            const c1 = new THREE.Color(0x33a6bf); const c2 = new THREE.Color(0x19bfb3); const c3 = new THREE.Color(0x99cc29); const c4 = new THREE.Color(0xffa600); const c5 = new THREE.Color(0xc22b0c); 
+            const col = new THREE.Color();
+            if (ratio < 0.25) col.lerpColors(c1, c2, ratio / 0.25); else if (ratio < 0.5) col.lerpColors(c2, c3, (ratio - 0.25) / 0.25); else if (ratio < 0.75) col.lerpColors(c3, c4, (ratio - 0.5) / 0.25); else col.lerpColors(c4, c5, (ratio - 0.75) / 0.25);
+            return col;
+        }
+
+        let scene, camera, renderer;
+        let galaxyGroup, backdropStarfield, nebulaParticles, coreGlow, orbitLineGroup;
+        let orbitingStarsPoints, orbitingStarsGeometry;
+        const orbitStarsCount = 18000; const orbitStarsData = [];     
+        let constellationGroup; const constellationsList = [];  
+        let beamGroup, beamParticlesGeometry; const beamParticlesCount = 350; const beamParticlesData = [];
+
+        let raycaster; let mouse = new THREE.Vector2(-9999, -9999); let interactionPlane; let isMouseOver = false;
+        
+        const CAMERA_Y_OFFSET = 0.0; const CAMERA_LOOKAT_Y = 0.0; 
+        let targetCamX = 0, targetCamY = CAMERA_Y_OFFSET, targetCamZ = 55; 
+        let currentCamX = 0, currentCamY = CAMERA_Y_OFFSET, currentCamZ = 120; 
+        let realMouseX = -100, realMouseY = -100; let currentMouseX = -100, currentMouseY = -100;
+        let scrollVelocity = 0; let galaxyRotationZ = 0.1; let accumulatedScrollAngle = 0; const GALAXY_TILT_X = -Math.PI / 2.38; 
+        let currentHoverDim = 0.0; let targetHoverDim = 0.0; let globalActiveConstellation = null; let globalActiveCoreMesh = null;
+
+        function initSpaceScene() {
+            const canvas = document.getElementById('cosmic-canvas');
+            scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x010103, 0.004);
+            const aspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
+            camera = new THREE.PerspectiveCamera(54, aspect, 0.1, 1000);
+            camera.position.set(currentCamX, currentCamY, currentCamZ);
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); renderer.setSize(Math.max(1, window.innerWidth), Math.max(1, window.innerHeight));
+
+            galaxyGroup = new THREE.Group(); galaxyGroup.rotation.x = GALAXY_TILT_X; galaxyGroup.rotation.z = galaxyRotationZ; scene.add(galaxyGroup);
+            const coreLight = new THREE.PointLight(0xfff0aa, 8, 150); coreLight.position.set(0, 0, 0); scene.add(coreLight);
+            scene.add(new THREE.AmbientLight(0x0e0e1a, 0.8));
+
+            interactionPlane = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshBasicMaterial({ visible: false, depthWrite: false }));
+            galaxyGroup.add(interactionPlane);
+            raycaster = new THREE.Raycaster();
+
+            generateBackdropStars(); generateNebulaCloud(); generateOrbitingStarsSystem(); generateFixedConstellations(); generateCoreLightBeam(); generateCoreGlowAndFilaments(coreProjects);       
+
+            window.addEventListener('mousemove', onMouseMove); window.addEventListener('touchmove', onTouchMove, { passive: true });
+            window.addEventListener('wheel', onWindowScroll, { passive: false }); window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mouseleave', () => { isMouseOver = false; mouse.set(-9999, -9999); });
+
+            window.addEventListener('click', () => {
+                if (isOverlayActive) return; 
+                if (globalActiveConstellation && globalActiveConstellation.hoverAmount > 0.45) openDetailPage(globalActiveConstellation.projectInfo);
+                else if (globalActiveCoreMesh && globalActiveCoreMesh.userData.currentOffset >= 1.0) openDetailPage(globalActiveCoreMesh.userData.info);
+            });
+        }
+
+        function onMouseMove(event) {
+            realMouseX = event.clientX; realMouseY = event.clientY; isMouseOver = true;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1; mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length > 0) {
+                realMouseX = event.touches[0].clientX; realMouseY = event.touches[0].clientY; isMouseOver = true;
+                mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1; mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            }
+        }
+
+        function onWindowScroll(event) {
+            if (isOverlayActive) return; event.preventDefault(); scrollVelocity += event.deltaY * 0.00005;
+        }
+
+        function onWindowResize() {
+            const w = window.innerWidth; const h = window.innerHeight; camera.aspect = w / h;
+            camera.updateProjectionMatrix(); renderer.setSize(w, h);
+        }
+
+        function generateCoreLightBeam() {
+            beamGroup = new THREE.Group();
+            // 빛기둥과 성운의 완벽한 3D 정렬: 빛기둥을 위로 6.8만큼 올리고 원반 뒤로 1.2만큼 밀어 성운 중심과 완전 대칭 매칭
+            beamGroup.position.set(0, 6.8, -1.2); 
+            galaxyGroup.add(beamGroup);
+
+            // 🛠️ 셰이더 공학 버그 완벽 수리: 실린더 수직 정점 수(heightSegments)를 1에서 128로 대폭 쪼개서 버텍스 셰이더의 가운데 부풀림 연산이 작동하도록 조치
+            const innerGeo = new THREE.CylinderGeometry(0.06, 0.06, 200, 16, 128, true);
+            innerGeo.rotateX(Math.PI / 2); 
+            const innerMat = new THREE.ShaderMaterial({
+                uniforms: { time: { value: 0 } },
+                vertexShader: `
+                    varying vec3 vNormal; varying vec2 vUv; varying vec3 vPosition; 
+                    void main() { 
+                        vNormal = normalize(normalMatrix * normal); vUv = uv; vPosition = position; 
+                        float distFromCenter = abs(uv.y - 0.5) * 2.0; float safeDist = clamp(1.0 - distFromCenter, 0.0, 1.0); 
+                        // 중앙은 거대하게 폭발하듯 두껍고 상하 끝단은 먼지처럼 가늘어지는 모래시계형 이차곡선 공식 적용
+                        float taper = mix(0.02, 24.0, pow(safeDist, 1.8)); 
+                        vec3 taperedPos = position; taperedPos.x *= taper; taperedPos.y *= taper; 
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(taperedPos, 1.0); 
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vNormal; varying vec2 vUv; varying vec3 vPosition; uniform float time; 
+                    void main() { 
+                        float distFromCenter = abs(vUv.y - 0.5) * 2.0; 
+                        vec3 c1 = vec3(0.20, 0.65, 0.75); vec3 c2 = vec3(0.10, 0.75, 0.70); vec3 c3 = vec3(0.60, 0.80, 0.16); vec3 c4 = vec3(1.0, 0.65, 0.0); vec3 c5 = vec3(0.76, 0.17, 0.05); vec3 finalColor; 
+                        if (distFromCenter < 0.25) finalColor = mix(c1, c2, distFromCenter / 0.25); else if (distFromCenter < 0.5) finalColor = mix(c2, c3, (distFromCenter - 0.25) / 0.25); else if (distFromCenter < 0.75) finalColor = mix(c3, c4, (distFromCenter - 0.5) / 0.25); else finalColor = mix(c4, c5, (distFromCenter - 0.75) / 0.25); 
+                        vec3 normal = normalize(vNormal); float edgeGlow = pow(abs(normal.z), 2.5); float verticalFade = smoothstep(-0.02, 0.42, 1.0 - distFromCenter); 
+                        float radialFade = smoothstep(0.0, 0.4, 1.0 - verticalFade); float flow = sin(vUv.y * 38.0 - time * 14.0) * 0.08 + 0.92; 
+                        gl_FragColor = vec4(finalColor, edgeGlow * verticalFade * flow * 0.42 * radialFade); 
+                    }
+                `, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+            });
+            beamGroup.add(new THREE.Mesh(innerGeo, innerMat));
+
+            const outerGeo = new THREE.CylinderGeometry(0.25, 0.25, 200, 24, 128, true);
+            outerGeo.rotateX(Math.PI / 2);
+            const outerMat = new THREE.ShaderMaterial({
+                uniforms: { time: { value: 0 } },
+                vertexShader: `
+                    varying vec3 vNormal; varying vec2 vUv; 
+                    void main() { 
+                        vNormal = normalize(normalMatrix * normal); vUv = uv; float distFromCenter = abs(uv.y - 0.5) * 2.0; float safeDist = clamp(1.0 - distFromCenter, 0.0, 1.0); 
+                        float taper = mix(0.02, 14.0, pow(safeDist, 1.8)); vec3 taperedPos = position; taperedPos.x *= taper; taperedPos.y *= taper; 
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(taperedPos, 1.0); 
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vNormal; varying vec2 vUv; uniform float time; 
+                    void main() { 
+                        float distFromCenter = abs(vUv.y - 0.5) * 2.0; vec3 c1 = vec3(0.20, 0.65, 0.75); vec3 c2 = vec3(0.10, 0.75, 0.70); vec3 c3 = vec3(0.60, 0.80, 0.16); vec3 c4 = vec3(1.0, 0.65, 0.0); vec3 c5 = vec3(0.76, 0.17, 0.05); vec3 finalColor; 
+                        if (distFromCenter < 0.25) finalColor = mix(c1, c2, distFromCenter / 0.25); else if (distFromCenter < 0.5) finalColor = mix(c2, c3, (distFromCenter - 0.25) / 0.25); else if (distFromCenter < 0.75) finalColor = mix(c3, c4, (distFromCenter - 0.5) / 0.25); else finalColor = mix(c4, c5, (distFromCenter - 0.75) / 0.25); 
+                        vec3 normal = normalize(vNormal); float edgeGlow = pow(abs(normal.z), 1.6); float verticalFade = smoothstep(0.02, 0.48, 1.0 - distFromCenter); float radialFade = smoothstep(0.0, 0.5, 1.0 - verticalFade); float flow = sin(vUv.y * 14.0 - time * 4.5) * 0.15 + 0.85; 
+                        gl_FragColor = vec4(finalColor, edgeGlow * verticalFade * flow * 0.18 * radialFade); 
+                    }
+                `, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+            });
+            beamGroup.add(new THREE.Mesh(outerGeo, outerMat));
+
+            const positions = new Float32Array(beamParticlesCount * 3); const colors = new Float32Array(beamParticlesCount * 3); const starTexture = createParticleTexture(); 
+            for (let i = 0; i < beamParticlesCount; i++) {
+                const angle = Math.random() * Math.PI * 2; const z = (Math.random() - 0.5) * 120; const distRatio = Math.abs(z) / 60.0; const maxRange = mix(0.9, 0.12, distRatio);
+                const baseRand = Math.pow(Math.random(), 1.5); const radius = 0.02 + baseRand * maxRange; const x = Math.cos(angle) * radius; const y = Math.sin(angle) * radius;
+                positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z; const col = getNebulaColorAtRatio(distRatio); colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b;
+                beamParticlesData.push({ speed: (0.2 + Math.random() * 0.6) * (Math.random() > 0.5 ? 1 : -1), baseRand: baseRand, radius: radius, angle: angle });
+            }
+            beamParticlesGeometry = new THREE.BufferGeometry(); beamParticlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3)); beamParticlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            beamGroup.add(new THREE.Points(beamParticlesGeometry, new THREE.PointsMaterial({ size: 0.5, transparent: true, opacity: 0.8, map: starTexture, blending: THREE.AdditiveBlending, depthWrite: false, vertexColors: true })));
+        }
+
+        function generateNebulaCloud() {
+            const count = 48000; const positions = new Float32Array(count * 3); const colors = new Float32Array(count * 3); const nebTexture = createSoftNebulaTexture(); 
+            for (let i = 0; i < count; i++) {
+                const u = Math.random(); const radius = Math.pow(u, 1.4) * 44; const angle = Math.random() * Math.PI * 2;
+                const x = Math.cos(angle) * radius; const y = Math.sin(angle) * radius; const zThickness = Math.max(2.0, 15.0 * Math.exp(-radius * 0.15)); const z = (Math.random() - 0.5) * zThickness;
+                positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
+                const distRatio = Math.min(1.0, radius / 40.0); const baseCol = getNebulaColorAtRatio(distRatio); colors[i * 3] = baseCol.r; colors[i * 3 + 1] = baseCol.g; colors[i * 3 + 2] = baseCol.b;
+            }
+            const nebGeometry = new THREE.BufferGeometry(); nebGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3)); nebGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3)); 
+            const nebMaterial = new THREE.ShaderMaterial({
+                uniforms: { uHoverDim: { value: 0.0 }, uSize: { value: 0.9 }, uBaseOpacity: { value: 0.40 }, uTexture: { value: nebTexture } },
+                vertexShader: `uniform float uSize; varying vec3 vColor; void main() { vColor = color; vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_PointSize = max(1.0, uSize * (300.0 / max(0.1, -mvPosition.z))); gl_Position = projectionMatrix * mvPosition; }`,
+                fragmentShader: `uniform float uHoverDim; uniform float uBaseOpacity; uniform sampler2D uTexture; varying vec3 vColor; void main() { vec3 finalColor = mix(vColor, vec3(1.0), uHoverDim); float alpha = mix(uBaseOpacity, uBaseOpacity * 0.15, uHoverDim); vec4 texColor = texture2D(uTexture, gl_PointCoord); gl_FragColor = vec4(finalColor, alpha) * texColor; }`,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, vertexColors: true
+            });
+            nebulaParticles = new THREE.Points(nebGeometry, nebMaterial); galaxyGroup.add(nebulaParticles); 
+        }
+
+        function generateCoreGlowAndFilaments(projects) {
+            coreGlow = new THREE.Group();
+            // 성운 그룹 전체를 위로 6.8만큼 정밀 상향 배치하여 웅장함 극대화
+            coreGlow.position.set(0, 6.8, 0); 
+            const innerFabricGeo = createIrregularCloudGeometry(2.3, 32, 2.1, 1.5, 0.9, false); const outerFabricGeo = createIrregularCloudGeometry(3.6, 24, 1.7, 1.4, 2.8, true);
+            function createIrregularCloudGeometry(baseRadius, detail, scaleX, scaleY, scaleZ, isOuter) {
+                const geo = new THREE.IcosahedronGeometry(baseRadius, detail); const posAttribute = geo.attributes.position; const v = new THREE.Vector3();
+                for (let i = 0; i < posAttribute.count; i++) {
+                    v.fromBufferAttribute(posAttribute, i); let deformation = 1.0;
+                    if (isOuter) { const verticalFactor = Math.abs(v.z) / baseRadius; deformation += 1.1 * verticalFactor; const waveX = Math.sin(v.x * 0.6) * Math.cos(v.y * 0.6); const waveY = Math.sin(v.y * 0.5) * Math.cos(v.z * 0.5); deformation *= (1.0 + 0.6 * waveX + 0.3 * waveY); } 
+                    else { const horizontalFactor = 1.0 - (Math.abs(v.z) / baseRadius); deformation += 0.7 * horizontalFactor * (1.0 + Math.cos(v.x * 0.9 + v.y * 0.9)); deformation += 0.25 * Math.sin(v.z * 1.8); }
+                    v.multiplyScalar(deformation); const twistRate = isOuter ? 0.6 : 0.9; const twistAngle = v.x * twistRate; const twistedY = v.y * Math.cos(twistAngle) - v.z * Math.sin(twistAngle); const twistedZ = v.y * Math.sin(twistAngle) + v.z * Math.cos(twistAngle);
+                    v.y = twistedY; v.z = twistedZ; v.x *= scaleX; v.y *= scaleY; v.z *= scaleZ; posAttribute.setXYZ(i, v.x, v.y, v.z);
+                }
+                geo.computeVertexNormals(); return geo;
+            }
+            
+            const fabricVertexShader = `uniform float time; uniform float speed; uniform float distortionStrength; varying vec3 vDeformedPos; varying vec3 vNormal; void main() { vNormal = normalize(normalMatrix * normal); vec3 pos = position; float radialDist = length(pos.xy); float waveFlow = sin(radialDist * 0.75 - time * speed * 2.2) * 0.75; float windRipple = cos(pos.z * 1.3 + time * speed * 1.4) * 0.45 + sin(pos.x * 0.9 - time * speed * 1.8) * 0.35; float totalDisplacement = (waveFlow + windRipple) * distortionStrength; vec3 newPosition = pos + normal * totalDisplacement; newPosition.x += totalDisplacement * 0.35; newPosition.y += totalDisplacement * 0.25; vDeformedPos = newPosition; gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0); }`;
+            const fabricFragmentShader = `varying vec3 vDeformedPos; varying vec3 vNormal; uniform float uHoverDim; uniform vec3 uColor1; void main() { float dist = length(vDeformedPos); float normalizedDist = clamp((dist - 1.0) / 15.0, 0.0, 1.0); float intensity = pow(max(0.0, 0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.2); vec3 finalCol = mix(uColor1 * intensity, vec3(1.0), uHoverDim); float alpha = mix(intensity * 1.8, 0.28, uHoverDim); gl_FragColor = vec4(finalCol, alpha); }`;
+            const sharedMaterialSettings = { vertexShader: fabricVertexShader, fragmentShader: fabricFragmentShader, wireframe: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide };
+            const innerFabricMat = new THREE.ShaderMaterial({ ...sharedMaterialSettings, uniforms: { time: { value: 0 }, speed: { value: 1.4 }, distortionStrength: { value: 2.1 }, uHoverDim: { value: 0.0 }, uColor1: { value: new THREE.Color() } } });
+            const outerFabricMat = new THREE.ShaderMaterial({ ...sharedMaterialSettings, uniforms: { time: { value: 0 }, speed: { value: 0.85 }, distortionStrength: { value: 3.2 }, uHoverDim: { value: 0.0 }, uColor1: { value: new THREE.Color() } } });
+
+            const clusterLayout = [];
+            clusterLayout.push({ x: 0, y: 0, z: 0, rotX: 0.3, rotY: 0.2, rotZ: 0.8, scale: [0.36, 0.31, 0.26], isOuter: false }, { x: 0, y: 0, z: 0, rotX: -0.3, rotY: -0.2, rotZ: -0.8, scale: [0.36, 0.31, 0.26], isOuter: false }, { x: 0, y: 0, z: 0.1, rotX: 0.5, rotY: 0.0, rotZ: 0.0, scale: [0.45, 0.4, 0.36], isOuter: true });
+            const arms = [{ angle: 0.6, twistDir: 1 }, { angle: Math.PI - 0.6, twistDir: -1 }, { angle: Math.PI + 0.6, twistDir: 1 }, { angle: -0.6, twistDir: -1 } ];
+            const radiiSteps = [{ r: 4.0, scaleOuter: [0.98, 0.83, 0.83], scaleInner: [0.9, 0.68, 0.68] }, { r: 8.5, scaleOuter: [1.05, 0.68, 0.75], scaleInner: [0.83, 0.6, 0.6] }, { r: 13.0, scaleOuter: [0.9, 0.6, 0.6], scaleInner: [0.75, 0.53, 0.53] }, { r: 17.5, scaleOuter: [0.75, 0.49, 0.49], scaleInner: [0.64, 0.41, 0.41] } ];
+            arms.forEach(arm => {
+                radiiSteps.forEach((step, idx) => {
+                    let spiralOffset = step.r * 0.15 * arm.twistDir; let currentAngle = arm.angle + spiralOffset; let x = step.r * Math.cos(currentAngle); let y = step.r * Math.sin(currentAngle); let z = Math.sin(step.r * 0.5) * 1.5 * arm.twistDir;
+                    clusterLayout.push({ x: x, y: y, z: z, rotX: step.r * 0.15 * arm.twistDir, rotY: step.r * 0.1, rotZ: currentAngle, scale: step.scaleOuter, isOuter: true });
+                    if (idx < 3) clusterLayout.push({ x: x * 0.9, y: y * 0.9, z: z * 0.9, rotX: step.r * 0.15 * arm.twistDir + 0.5, rotY: step.r * 0.1 - 0.3, rotZ: currentAngle + 0.2, scale: step.scaleInner, isOuter: false });
+                });
+            });
+
+            clusterLayout.forEach((config, idx) => {
+                const baseMat = config.isOuter ? outerFabricMat : innerFabricMat; const uniqueMat = baseMat.clone(); 
+                const projectIdx = idx % Math.max(1, projects.length); const proj = projects.length > 0 ? projects[projectIdx] : null;
+                if (proj) uniqueMat.uniforms.uColor1.value.copy(proj.color); else uniqueMat.uniforms.uColor1.value.set(0x89f5e1);
+                const mesh = new THREE.Mesh(config.isOuter ? outerFabricGeo : innerFabricGeo, uniqueMat);
+                mesh.position.set(config.x, config.y, config.z - 0.2); 
+                mesh.rotation.set(config.rotX, config.rotY, config.rotZ); 
+                const scaleMultiplier = 0.64; mesh.scale.set(config.scale[0] * scaleMultiplier, config.scale[1] * scaleMultiplier, config.scale[2] * scaleMultiplier);
+                mesh.userData = { currentHoverDim: 0.0, targetHoverDim: 0.0, basePosition: mesh.position.clone(), currentOffset: 0.0, targetOffset: 0.0, info: proj };
+                coreGlow.add(mesh);
+            });
+            galaxyGroup.add(coreGlow); 
+        }
+
+        function generateOrbitingStarsSystem() {
+            orbitLineGroup = new THREE.Group(); galaxyGroup.add(orbitLineGroup); 
+            const gridSpiralSegments = 12;
+            for (let k = 0; k < gridSpiralSegments; k++) {
+                const spiralGeo = new THREE.BufferGeometry(); const sPoints = []; const thetaStart = (k / gridSpiralSegments) * Math.PI * 2;
+                for (let r = 5; r < 50; r += 0.5) sPoints.push(new THREE.Vector3(Math.cos(thetaStart + r * 0.12) * r, Math.sin(thetaStart + r * 0.12) * r, 0));
+                spiralGeo.setFromPoints(sPoints); orbitLineGroup.add(new THREE.Line(spiralGeo, new THREE.LineBasicMaterial({ color: 0x33a6bf, transparent: true, opacity: 0.015, blending: THREE.AdditiveBlending })));
+            }
+
+            const positions = new Float32Array(orbitStarsCount * 3); const colors = new Float32Array(orbitStarsCount * 3); const starTexture = createParticleTexture(); 
+            for (let i = 0; i < orbitStarsCount; i++) {
+                const radius = 0.5 + Math.pow(Math.random(), 1.7) * 45; const angle = ((i % 2) * Math.PI) + radius * 0.16 + (Math.random() - 0.5) * (3.8 / (1 + radius * 0.05)); const z = (Math.random() - 0.5) * Math.max(1.5, 12.0 * Math.exp(-radius * 0.15)); 
+                positions[i * 3] = Math.cos(angle) * radius; positions[i * 3 + 1] = Math.sin(angle) * radius; positions[i * 3 + 2] = z;
+                const nebCol = getNebulaColorAtRatio(Math.min(1.0, radius / 35.0)); const whiteMix = 0.3 + Math.random() * 0.6; 
+                colors[i * 3] = mix(nebCol.r, 1.0, whiteMix); colors[i * 3 + 1] = mix(nebCol.g, 1.0, whiteMix); colors[i * 3 + 2] = mix(nebCol.b, 1.0, whiteMix);
+                orbitStarsData.push({ radius: radius, angle: angle, speed: (0.003 / Math.sqrt(radius + 0.1)) * (0.8 + Math.random() * 0.4), z: z });
+            }
+            orbitingStarsGeometry = new THREE.BufferGeometry(); orbitingStarsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3)); orbitingStarsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            // 화이트 시프트(White Shift) 기능 셰이더 이식: 마우스 호버 시 배경 별들이 은은하게 흰색으로 변환되는 고성능 연산 적용
+            const starsMaterial = new THREE.ShaderMaterial({
+                uniforms: { uHoverDim: { value: 0.0 }, uSize: { value: 0.38 }, uBaseOpacity: { value: 0.85 }, uTexture: { value: starTexture } },
+                vertexShader: `uniform float uSize; varying vec3 vColor; void main() { vColor = color; vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_PointSize = max(1.0, uSize * (300.0 / max(0.1, -mvPosition.z))); gl_Position = projectionMatrix * mvPosition; }`,
+                fragmentShader: `
+                    uniform float uHoverDim; uniform float uBaseOpacity; uniform sampler2D uTexture; varying vec3 vColor; 
+                    void main() { 
+                        // 호버 시 전체 배경색을 흰색(vec3(1.0))으로 점진 융합
+                        vec3 finalColor = mix(vColor, vec3(1.0), uHoverDim); 
+                        // 호버 시 배경 별들의 투명도를 낮춰 선택된 별자리 강조
+                        float alpha = mix(uBaseOpacity, uBaseOpacity * 0.40, uHoverDim); 
+                        vec4 texColor = texture2D(uTexture, gl_PointCoord); 
+                        gl_FragColor = vec4(finalColor, alpha) * texColor; 
+                    }`,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, vertexColors: true
+            });
+            orbitingStarsPoints = new THREE.Points(orbitingStarsGeometry, starsMaterial); galaxyGroup.add(orbitingStarsPoints); 
+        }
+
+        function generateFixedConstellations() {
+            const constellationGroup = new THREE.Group(); galaxyGroup.add(constellationGroup);
+            const generatedPositions = []; const starTexture = createParticleTexture(); 
+            const count = constellationProjects.length;
+            if(count === 0) return;
+
+            let attempts = 0; const maxAttempts = count * 50;
+            while (generatedPositions.length < count && attempts < maxAttempts) {
+                attempts++; const radius = 10 + Math.random() * 34; const angle = Math.random() * Math.PI * 2;
+                const candidate = new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, (Math.random() - 0.5) * 3.5); 
+                if (!generatedPositions.some(p => candidate.distanceTo(p) < 8.5)) generatedPositions.push(candidate);
+            }
+
+            const actualCount = generatedPositions.length;
+            for (let c = 0; c < actualCount; c++) {
+                const anchor = generatedPositions[c]; const proj = constellationProjects[c]; 
+                const nodeCount = 3 + Math.floor(Math.random() * 3); const localTargets = [new THREE.Vector3(0,0,0)]; const dispersedPositions = [new THREE.Vector3((Math.random()-0.5)*3, (Math.random()-0.5)*3, (Math.random()-0.5)*1)];
+                for (let n = 1; n < nodeCount; n++) {
+                    const localAngle = (n / (nodeCount - 1)) * Math.PI * 1.5 + (Math.random() - 0.5) * 0.4;
+                    const tp = new THREE.Vector3(Math.cos(localAngle) * 2, Math.sin(localAngle) * 2, (Math.random() - 0.5) * 0.5);
+                    localTargets.push(tp); dispersedPositions.push(new THREE.Vector3(tp.x*2+(Math.random()-0.5), tp.y*2+(Math.random()-0.5), tp.z*1.5+(Math.random()-0.5)));
+                }
+                const lineConnections = []; for(let j=0; j<nodeCount-1; j++) lineConnections.push([j, j+1]); if(nodeCount>3) lineConnections.push([nodeCount-1, 0]);
+                const sg = new THREE.Group(); sg.position.copy(anchor); constellationGroup.add(sg);
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(lineConnections.map(()=>new THREE.Vector3()));
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+                sg.add(new THREE.LineSegments(lineGeo, lineMat));
+                const nodeGeo = new THREE.BufferGeometry().setFromPoints(dispersedPositions);
+                const baseColor = proj.color;
+                const nodeMat = new THREE.PointsMaterial({ size: 0.38, color: baseColor.clone(), transparent: true, opacity: 0.5, map: starTexture, blending: THREE.AdditiveBlending, depthWrite: false });
+                sg.add(new THREE.Points(nodeGeo, nodeMat));
+                constellationsList.push({
+                    group: sg, anchor: anchor.clone(), orbitRadius: Math.sqrt(anchor.x*anchor.x+anchor.y*anchor.y), orbitAngle: Math.atan2(anchor.y, anchor.x), orbitSpeed: (0.018 / Math.sqrt(Math.sqrt(anchor.x*anchor.x+anchor.y*anchor.y) + 0.1)) * 1.0, baseZ: anchor.z,
+                    projectInfo: proj, localTargets: localTargets, dispersedPositions: dispersedPositions, lineConnections: lineConnections, nodeGeo: nodeGeo, lineGeo: lineGeo, linesMaterial: lineMat, nodesMaterial: nodeMat,
+                    offsetTime: Math.random() * 100, hoverAmount: 0.0, hoverVelocity: 0.0, baseColor: baseColor
+                });
+            }
+        }
+
+        function generateBackdropStars() {
+            const p = new Float32Array(15000*3); const c = new Float32Array(15000*3);
+            for(let i=0; i<15000; i++){ const r = 220+Math.random()*180; const t = Math.random()*Math.PI*2; const ph = Math.acos(Math.random()*2-1); p[i*3]=r*Math.sin(ph)*Math.cos(t); p[i*3+1]=r*Math.sin(ph)*Math.sin(t); p[i*3+2]=r*Math.cos(ph); c[i*3]=c[i*3+1]=c[i*3+2]=1;}
+            const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(p,3)); geo.setAttribute('color', new THREE.BufferAttribute(c,3));
+            backdropStarfield = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.35, transparent: true, vertexColors: true, map: createParticleTexture(), blending: THREE.AdditiveBlending, depthWrite: false })); scene.add(backdropStarfield); 
+        }
+
+        function mix(start, end, amt) { return (1 - amt) * start + amt * end; }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (currentMouseX === -100) { currentMouseX = realMouseX; currentMouseY = realMouseY; }
+            currentMouseX += (realMouseX - currentMouseX) * 0.16; currentMouseY += (realMouseY - currentMouseY) * 0.16;
+            const rocketCursor = document.getElementById('rocket-cursor');
+            if (rocketCursor && realMouseX !== -100) {
+                rocketCursor.style.left = `${currentMouseX - 16}px`; rocketCursor.style.top = `${currentMouseY - 16}px`;
+                const dx = realMouseX - currentMouseX; const dy = realMouseY - currentMouseY;
+                if (Math.abs(dx) + Math.abs(dy) > 0.1) rocketCursor.style.transform = `rotate(${Math.atan2(dy, dx) + Math.PI / 2}rad)`;
+            }
+
+            let currentScrollSpeed = isOverlayActive ? 0 : scrollVelocity; scrollVelocity *= 0.94;
+            galaxyRotationZ -= isOverlayActive ? 0.0005 : (0.0012 + currentScrollSpeed * 1.5); accumulatedScrollAngle -= currentScrollSpeed * 1.5; 
+            const curTime = Date.now() * 0.001;
+            
+            if(nebulaParticles) nebulaParticles.rotation.z -= 0.0001;
+            if(backdropStarfield) backdropStarfield.rotation.z -= 0.00004; 
+
+            if(coreGlow) {
+                const pulse = 0.5 * (1 + Math.sin(curTime * 1.5) * 0.02); coreGlow.scale.set(pulse, pulse, pulse);
+                coreGlow.children.forEach(child => { if(child.material && child.material.uniforms && child.material.uniforms.time) child.material.uniforms.time.value = curTime; });
+            }
+
+            if(beamGroup) beamGroup.children.forEach(child => { if(child.material && child.material.uniforms && child.material.uniforms.time) child.material.uniforms.time.value = curTime; });
+
+            if(beamParticlesGeometry) {
+                const positions = beamParticlesGeometry.attributes.position.array; const colors = beamParticlesGeometry.attributes.color.array;
+                for (let i = 0; i < beamParticlesCount; i++) {
+                    const data = beamParticlesData[i]; positions[i * 3 + 2] += data.speed;
+                    if (positions[i * 3 + 2] > 60) positions[i * 3 + 2] = -60; else if (positions[i * 3 + 2] < -60) positions[i * 3 + 2] = 60;
+                    const currentRatio = Math.abs(positions[i * 3 + 2]) / 60.0; data.radius = 0.02 + data.baseRand * mix(0.9, 0.12, currentRatio); 
+                    data.angle -= 0.015 * (data.speed > 0 ? 1 : -1); positions[i * 3] = Math.cos(data.angle) * data.radius; positions[i * 3 + 1] = Math.sin(data.angle) * data.radius;
+                    const col = getNebulaColorAtRatio(currentRatio); colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b;
+                }
+                beamParticlesGeometry.attributes.position.needsUpdate = true; beamParticlesGeometry.attributes.color.needsUpdate = true;
+            }
+
+            if(galaxyGroup) { galaxyGroup.rotation.x = GALAXY_TILT_X; galaxyGroup.rotation.z = galaxyRotationZ; galaxyGroup.updateMatrixWorld(true); }
+
+            let hoveredCoreMesh = null;
+            if (!isOverlayActive && isMouseOver && mouse && mouse.x > -9000 && coreGlow) {
+                let minScreenDist = 9999; const aspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
+                coreGlow.children.forEach(child => {
+                    if (child.userData && child.userData.info && child.userData.basePosition) {
+                        const tempV = new THREE.Vector3().copy(child.userData.basePosition);
+                        // 정밀 복원: 성운 위치를 위로 6.8만큼 정렬한 값을 프로젝션 연산에 대입하여 호버링 좌표 불일치 해결
+                        tempV.y += 6.8; tempV.applyMatrix4(galaxyGroup.matrixWorld); tempV.project(camera);                       
+                        const screenDist = Math.sqrt(Math.pow(tempV.x - mouse.x, 2) + Math.pow((tempV.y - mouse.y) / aspect, 2));
+                        if (screenDist < 0.15 && screenDist < minScreenDist) { minScreenDist = screenDist; hoveredCoreMesh = child; }
+                    }
+                });
+            }
+
+            let activeHUDTarget = null;
+            if (constellationsList.length > 0) {
+                const aspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
+                constellationsList.forEach(constData => {
+                    constData.orbitAngle -= constData.orbitSpeed + (currentScrollSpeed * 0.05);
+                    constData.anchor.x = Math.cos(constData.orbitAngle) * constData.orbitRadius; constData.anchor.y = Math.sin(constData.orbitAngle) * constData.orbitRadius;
+                    
+                    let isUnderMouse = false; 
+                    if (!isOverlayActive && isMouseOver && mouse.x > -9000) {
+                        let totalAngle = (constData.orbitAngle + galaxyRotationZ) % (Math.PI * 2);
+                        if (totalAngle < 0) totalAngle += Math.PI * 2; if (totalAngle > Math.PI) totalAngle -= Math.PI * 2; 
+                        if (totalAngle >= -Math.PI / 2 - (Math.PI / 3) && totalAngle <= -Math.PI / 2 + (Math.PI / 3)) {
+                            const tempV = new THREE.Vector3().copy(constData.anchor); tempV.applyMatrix4(galaxyGroup.matrixWorld); tempV.project(camera);                       
+                            const screenDist = Math.sqrt(Math.pow(tempV.x - mouse.x, 2) + Math.pow((tempV.y - mouse.y) / aspect, 2));
+                            if (screenDist < 0.16 && !hoveredCoreMesh) isUnderMouse = true; 
+                        }
+                    }
+                    
+                    constData.hoverAmount += ((isUnderMouse ? 1.0 : 0.0) - constData.hoverAmount) * 0.09;
+                    if (isUnderMouse) activeHUDTarget = constData; 
+
+                    for (let i = 0; i < constData.localTargets.length; i++) {
+                        const currentPos = new THREE.Vector3().lerpVectors(constData.dispersedPositions[i], constData.localTargets[i], Math.min(1.0, constData.hoverAmount));
+                        if (constData.hoverAmount < 0.98) { const drift = 0.45 * (1.0 - Math.min(1.0, constData.hoverAmount)); currentPos.x += Math.sin(curTime * 0.8 + i * 2.0) * drift; currentPos.y += Math.cos(curTime * 0.7 + i * 1.5) * drift; }
+                        constData.nodeGeo.attributes.position.setXYZ(i, currentPos.x, currentPos.y, currentPos.z);
+                    }
+                    constData.nodeGeo.attributes.position.needsUpdate = true;
+                    
+                    if (constData.lineConnections.length > 0) {
+                        const normalizedHover = Math.max(0, Math.min(1, (constData.hoverAmount - 0.12) / 0.88));
+                        constData.lineConnections.forEach((conn, k) => {
+                            const p1 = new THREE.Vector3().fromBufferAttribute(constData.nodeGeo.attributes.position, conn[0]); const p2 = new THREE.Vector3().fromBufferAttribute(constData.nodeGeo.attributes.position, conn[1]);
+                            const renderP2 = new THREE.Vector3().lerpVectors(p1, p2, Math.max(0, Math.min(1.0, (normalizedHover * constData.lineConnections.length) - k)));
+                            constData.lineGeo.attributes.position.setXYZ(k * 2, p1.x, p1.y, p1.z); constData.lineGeo.attributes.position.setXYZ(k * 2 + 1, renderP2.x, renderP2.y, renderP2.z);
+                        });
+                        constData.lineGeo.attributes.position.needsUpdate = true;
+                    }
+                    
+                    const col = new THREE.Color().copy(constData.baseColor);
+                    if (constData.hoverAmount > 0.0) col.lerp(new THREE.Color(constData.projectInfo.colorHex), Math.min(1.0, constData.hoverAmount));
+                    else col.lerp(new THREE.Color(0xffffff), currentHoverDim);
+                    constData.nodesMaterial.color.copy(col); constData.linesMaterial.color.copy(col);
+                    constData.nodesMaterial.size = mix(0.38, 1.3, Math.min(1.0, constData.hoverAmount * 1.3)); 
+                    constData.nodesMaterial.opacity = mix(activeHUDTarget && activeHUDTarget !== constData ? mix(0.5, 0.08, currentHoverDim) : 0.5, 1.0, Math.min(1.0, constData.hoverAmount * 1.3)); 
+                    constData.linesMaterial.opacity = Math.min(1.0, (Math.max(0, (constData.hoverAmount - 0.08) / 0.92)) * 1.5); 
+                    constData.group.position.copy(new THREE.Vector3(constData.anchor.x, constData.anchor.y, constData.baseZ + Math.sin(curTime * 0.4 + constData.offsetTime) * 0.12));
+                });
+            }
+
+            globalActiveConstellation = activeHUDTarget; globalActiveCoreMesh = hoveredCoreMesh;
+            currentHoverDim += (((activeHUDTarget || hoveredCoreMesh) && !isOverlayActive ? 0.85 : 0.0) - currentHoverDim) * 0.08;
+
+            if(orbitingStarsPoints && orbitingStarsGeometry) {
+                const positions = orbitingStarsGeometry.attributes.position.array; const speedOffset = currentScrollSpeed * 0.05; const len = orbitStarsCount;
+                for (let i = 0; i < len; i++) {
+                    const data = orbitStarsData[i]; data.angle -= data.speed + speedOffset; const idx = i * 3;
+                    positions[idx] = Math.cos(data.angle) * data.radius; positions[idx + 1] = Math.sin(data.angle) * data.radius; 
+                }
+                orbitingStarsGeometry.attributes.position.needsUpdate = true;
+            }
+            
+            // 화이트 시프트 동기화: 마우스 호버 시 배경 별무리 전체 셰이더에도 호버 디밍 지수 대입 연동
+            if(orbitingStarsPoints && orbitingStarsPoints.material && orbitingStarsPoints.material.uniforms) {
+                orbitingStarsPoints.material.uniforms.uHoverDim.value = currentHoverDim;
+            }
+            if(nebulaParticles && nebulaParticles.material.uniforms) nebulaParticles.material.uniforms.uHoverDim.value = currentHoverDim;
+            if(backdropStarfield && backdropStarfield.material) backdropStarfield.material.opacity = mix(1.0, 0.15, currentHoverDim);
+
+            if (coreGlow) {
+                coreGlow.children.forEach(child => {
+                    if (child.material && child.material.uniforms && child.userData.basePosition) {
+                        let matTargetDim = 0.0; let targetOffset = 0.0; 
+                        if (hoveredCoreMesh && !isOverlayActive) {
+                            if (child === hoveredCoreMesh) { matTargetDim = 0.0; targetOffset = 21.0; } else { matTargetDim = 0.85; targetOffset = 0.0; }
+                        } else if (activeHUDTarget && !isOverlayActive) { matTargetDim = 0.85; targetOffset = 0.0; }
+                        child.userData.currentHoverDim += (matTargetDim - child.userData.currentHoverDim) * 0.12; 
+                        child.material.uniforms.uHoverDim.value = child.userData.currentHoverDim;
+                        child.userData.currentOffset += (targetOffset - child.userData.currentOffset) * 0.10;
+                        const basePos = child.userData.basePosition;
+                        // 성운이 원반 중앙 레이어에 정확히 잠기도록 전방 당김 보정치 z-0.2 고정
+                        child.position.set(basePos.x, basePos.y, basePos.z - 0.2 + child.userData.currentOffset);
+                    }
+                });
+            }
+
+            const hudOverlay = document.getElementById('constellation-overlay'); const card = document.getElementById('project-card');
+            if (activeHUDTarget && hudOverlay && !isOverlayActive) {
+                const projectedPos = new THREE.Vector3().copy(activeHUDTarget.group.position); projectedPos.applyMatrix4(galaxyGroup.matrixWorld); projectedPos.project(camera);
+                hudOverlay.style.left = `${(projectedPos.x * 0.5 + 0.5) * window.innerWidth}px`; hudOverlay.style.top = `${(projectedPos.y * -0.5 + 0.5) * window.innerHeight - 20}px`; hudOverlay.style.display = 'flex';
+                if (activeHUDTarget.hoverAmount >= 0.45) {
+                    document.getElementById('overlay-category').innerText = activeHUDTarget.projectInfo.categories.join(' / '); document.getElementById('overlay-category').style.color = activeHUDTarget.projectInfo.colorHex;
+                    document.getElementById('overlay-project').innerText = activeHUDTarget.projectInfo.title;
+                    card.classList.remove('opacity-0', 'scale-90'); card.classList.add('opacity-100', 'scale-100');
+                } else { card.classList.add('opacity-0', 'scale-90'); card.classList.remove('opacity-100', 'scale-100'); }
+            } else if (hoveredCoreMesh && hudOverlay && hoveredCoreMesh.userData.info && !isOverlayActive) {
+                const projectedPos = new THREE.Vector3().copy(hoveredCoreMesh.position); projectedPos.y += 6.8; 
+                projectedPos.applyMatrix4(galaxyGroup.matrixWorld); projectedPos.project(camera);
+                hudOverlay.style.left = `${(projectedPos.x * 0.5 + 0.5) * window.innerWidth}px`; hudOverlay.style.top = `${(projectedPos.y * -0.5 + 0.5) * window.innerHeight - 150}px`; hudOverlay.style.display = 'flex';
+                if (hoveredCoreMesh.userData.currentOffset >= 1.5) {
+                    document.getElementById('overlay-category').innerText = hoveredCoreMesh.userData.info.categories.join(' / '); document.getElementById('overlay-category').style.color = hoveredCoreMesh.userData.info.colorHex;
+                    document.getElementById('overlay-project').innerText = hoveredCoreMesh.userData.info.title;
+                    card.classList.remove('opacity-0', 'scale-90'); card.classList.add('opacity-100', 'scale-100');
+                } else { card.classList.add('opacity-0', 'scale-90'); card.classList.remove('opacity-100', 'scale-100'); }
+            } else if (hudOverlay) {
+                hudOverlay.style.display = 'none'; card.classList.add('opacity-0', 'scale-90'); card.classList.remove('opacity-100', 'scale-100');
+            }
+
+            currentCamX += ((isOverlayActive ? 0 : targetCamX) - currentCamX) * 0.04; currentCamY += ((isOverlayActive ? CAMERA_Y_OFFSET : targetCamY) - currentCamY) * 0.04; currentCamZ += ((isOverlayActive ? 120 : targetCamZ) - currentCamZ) * 0.04;
+            camera.position.set(currentCamX, currentCamY, currentCamZ); camera.lookAt(0, CAMERA_LOOKAT_Y, 0); renderer.render(scene, camera);
+        }
+        window.onload = function() { initProjectDatabase(); };
+    </script>
+</body>
+</html>
