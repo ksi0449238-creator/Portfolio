@@ -876,7 +876,7 @@
             currentCamX += ((isOverlayActive ? 0 : targetCamX) - currentCamX) * 0.04; currentCamY += ((isOverlayActive ? CAMERA_Y_OFFSET : targetCamY) - currentCamY) * 0.04; currentCamZ += ((isOverlayActive ? 120 : targetCamZ) - currentCamZ) * 0.04;
             camera.position.set(currentCamX, currentCamY, currentCamZ); camera.lookAt(0, CAMERA_LOOKAT_Y, 0); renderer.render(scene, camera);
         }
-        window.onload = function() { initProjectDatabase(); };
+        window.onload = function() { processData(embeddedDatabase); };
     </script>
 </body>
 </html>
